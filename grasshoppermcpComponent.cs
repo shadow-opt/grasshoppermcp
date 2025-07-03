@@ -22,7 +22,6 @@ namespace grasshoppermcp
         /// Subcategory the panel. If you use non-existing tab or panel names, 
         /// new tabs/panels will automatically be created.
         /// </summary>
-        private static volatile bool isRunning = false;
         private static int grasshopperPort = 8080;
         private static McpServer _server;
         private readonly object _serverLock = new object();
@@ -74,77 +73,96 @@ namespace grasshoppermcp
             bool enabled = false;
             int port = grasshopperPort;
 
-
             if (!DA.GetData(0, ref enabled)) return;
             if (!DA.GetData(1, ref port)) return;
 
             grasshopperPort = port;
             var mcpAddress = $"http://localhost:{grasshopperPort}/";
 
-
-            //HttpListener _httpListener = new();
-            //_httpListener.Prefixes.Add(mcpAddress);
-            //_httpListener.Start();
-            //Pipe clientToServerPipe = new();
-            //Pipe serverToClientPipe = new();
-
-            //var builder = new ServiceCollection()
-            //    .AddMcpServer()
-            //    .WithStreamServerTransport(
-            //        clientToServerPipe.Reader.AsStream(), 
-            //        serverToClientPipe.Writer.AsStream()); 
-
-            //builder.WithToolsFromAssembly();
-            // if (enabled && !isRunning)
-            // {
-            //     isRunning = true;
-            //     DA.SetData(0, $"Running on {mcpAddress}");
-            //     _server.Start(mcpAddress);
-            // }
-            // else if (!enabled && isRunning)
-            // {
-            //     isRunning = false;
-            //     DA.SetData(0, "Stopped");
-            //     _server.Stop();
-            // }
-            // else if (enabled && isRunning)
-            // {
-            //     DA.SetData(0, $"Running on {mcpAddress}");
-            // }
-            // else
-            // {
-            //     DA.SetData(0, "Stopped");
-            // }
             lock (_serverLock)
             {
-                // _isrunning 应该是你组件的一个成员变量
                 bool serverIsActuallyRunning = (_server != null && _server.IsListening);
 
                 if (enabled && !serverIsActuallyRunning)
                 {
-                    // 需要启动
+                    // 需要启动 - 使用异步方式避免阻塞主线程
                     try
                     {
-                        // 如果 _server 是 null，需要先创建实例
                         if (_server == null) _server = new McpServer();
-                        _server.Start(mcpAddress);
+
+                        // 异步启动服务器，避免阻塞主线程
+                        Task.Run(() =>
+                        {
+                            try
+                            {
+                                _server.Start(mcpAddress);
+                                // 在 Rhino 主线程上更新组件状态
+                                Rhino.RhinoApp.InvokeOnUiThread(() =>
+                                {
+                                    this.Message = "Running";
+                                    this.ExpireSolution(false); // 触发重新计算以更新状态
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                Rhino.RhinoApp.InvokeOnUiThread(() =>
+                                {
+                                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Server start failed: {ex.Message}");
+                                    this.Message = "Error";
+                                });
+                            }
+                        });
+
+                        // 立即返回启动中的状态
+                        this.Message = "Starting...";
+                        DA.SetData(0, "Starting...");
                     }
                     catch (Exception ex)
                     {
                         AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
+                        this.Message = "Error";
+                        DA.SetData(0, "Error");
                     }
                 }
                 else if (!enabled && serverIsActuallyRunning)
                 {
-                    // 需要停止
-                    _server?.Stop(); // 使用 ?. 来避免 _server 本身为 null 的情况
+                    // 需要停止 - 使用异步方式避免阻塞主线程
+                    if (_server != null)
+                    {
+                        Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await _server.StopAsync(); // 使用异步停止方法
+                                // 在 Rhino 主线程上更新组件状态
+                                Rhino.RhinoApp.InvokeOnUiThread(() =>
+                                {
+                                    this.Message = "Stopped";
+                                    this.ExpireSolution(false); // 触发重新计算以更新状态
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                Rhino.RhinoApp.InvokeOnUiThread(() =>
+                                {
+                                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Server stop failed: {ex.Message}");
+                                });
+                            }
+                        });
+
+                        // 立即返回停止中的状态
+                        this.Message = "Stopping...";
+                        DA.SetData(0, "Stopping...");
+                    }
                 }
-
-                // 更新组件状态信息
-                this.Message = (_server != null && _server.IsListening) ? "Running" : "Stopped";
+                else
+                {
+                    // 更新组件状态信息
+                    string status = (_server != null && _server.IsListening) ? $"Running on {mcpAddress}" : "Stopped";
+                    this.Message = (_server != null && _server.IsListening) ? "Running" : "Stopped";
+                    DA.SetData(0, status);
+                }
             }
-
-
         }
 
 

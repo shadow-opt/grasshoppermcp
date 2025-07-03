@@ -409,3 +409,8 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+
+*.md
+# Don't ignore README.md
+!README.md

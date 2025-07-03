@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Types;
 using Grasshopper.Kernel.Parameters;
+using Grasshopper.Kernel.Special;
 using Rhino.Geometry;
 
 namespace grasshoppermcp.Tools
@@ -23,6 +24,64 @@ namespace grasshoppermcp.Tools
         private static readonly Dictionary<string, Guid> _componentMap = new Dictionary<string, Guid>();
 
         /// <summary>
+        /// 获取工具使用指南
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>使用指南</returns>
+        [McpServerTool(Name = "get_tool_guide")]
+        [Description("🚀 新手必看 - 获取 Grasshopper 工具的使用指南和最佳实践。如果您不确定应该使用哪个工具，请先调用此方法。")]
+        public static Task<string> GetToolGuide(CancellationToken cancellationToken = default)
+        {
+            var guide = @"
+🎯 Grasshopper MCP 工具使用指南
+
+📋 推荐的工作流程：
+1. get_document_info - 了解当前画布状态
+2. add_component - 添加单个组件（最常用、最可靠）
+3. connect_components - 连接组件
+4. 如需复杂模式：get_available_patterns → create_pattern
+
+🔧 工具选择指南：
+
+✅ 简单需求（推荐）：
+- 添加滑块、面板、点等 → 使用 add_component
+- 连接组件 → 使用 connect_components
+- 查看画布状态 → 使用 get_document_info
+
+⚠️ 复杂需求（谨慎使用）：
+- 预定义的复杂模式 → 先用 get_available_patterns，再用 create_pattern
+- 多个相关组件的组合 → 考虑多次使用 add_component
+
+❌ 不建议：
+- 直接使用 create_pattern 而不先查看可用模式
+- 对简单需求使用 create_pattern
+
+🎨 示例场景：
+
+场景1：创建一个数值滑块
+→ add_component(component_type='slider', x=100, y=100, value='10')
+
+场景2：创建滑块控制圆的半径
+→ 1. add_component('slider', 100, 100, '5') → 得到slider_id
+→ 2. add_component('point', 200, 100, '{""X"":0,""Y"":0,""Z"":0}') → 得到point_id  
+→ 3. add_component('circle', 300, 100) → 得到circle_id
+→ 4. connect_components(slider_id, circle_id, 'Value', 'Radius')
+→ 5. connect_components(point_id, circle_id, 'Point', 'Center')
+
+场景3：创建点阵（复杂模式）
+→ 1. get_available_patterns() → 查看可用模式
+→ 2. create_pattern('Point Grid') → 创建预定义的点阵模式
+
+💡 最佳实践：
+- 优先使用基础工具组合，而不是复杂的预设模式
+- 每次操作后可以用 get_document_info 查看结果
+- 组件坐标建议有合理间距（100-200像素）
+";
+
+            return Task.FromResult(guide);
+        }
+
+        /// <summary>
         /// 在 Grasshopper 画布上添加组件
         /// </summary>
         /// <param name="component_type">组件类型</param>
@@ -31,11 +90,12 @@ namespace grasshoppermcp.Tools
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>操作结果</returns>
         [McpServerTool(Name = "add_component")]
-        [Description("在 Grasshopper 画布的指定位置添加一个组件。使用前请先读取 grasshopper://current_document 资源了解当前画布状态。支持的组件类型包括：slider（数值滑块）、panel（文本面板）、point（点）、circle（圆）、line（直线）、curve（曲线）等。成功后返回组件的唯一ID，用于后续连接操作。")]
+        [Description("🔧 基础工具 - 推荐优先使用。在 Grasshopper 画布上添加单个组件。这是最可靠的方法来创建组件。支持的组件类型：slider（数值滑块）、panel（文本面板）、point（点）、circle（圆）、line（直线）、curve（曲线）、rectangle（矩形）、box（长方体）等。成功后返回组件ID用于连接。对于复杂模式，建议多次调用此方法逐个添加组件，然后使用 connect_components 连接它们。")]
         public static Task<string> AddComponent(
             [Description("组件类型。常用类型：slider（数值滑块，用于提供数值输入）、panel（文本面板，用于显示信息）、point（点几何）、circle（圆几何）、line（直线几何）、curve（曲线几何）、voronoi（泰森多边形）、delaunay（德劳内三角剖分）")] string component_type,
             [Description("组件在画布上的X坐标位置（像素单位）")] double x,
             [Description("组件在画布上的Y坐标位置（像素单位）")] double y,
+            [Description("（可选）为组件设置初始值。对于'slider'，是数字；对于'panel'，是字符串；对于'point'，是JSON '''{\"X\":10,\"Y\":20,\"Z\":0}'''；对于'plane'，是JSON '''{\"Origin\":{\"X\":0,\"Y\":0,\"Z\":0},\"Normal\":{\"X\":0,\"Y\":0,\"Z\":1}}'''。")] string value = null,
             CancellationToken cancellationToken = default)
         {
             try
@@ -71,6 +131,12 @@ namespace grasshoppermcp.Tools
 
                 // 添加到文档
                 document.AddObject(component, false);
+
+                // 如果有初始值，则设置它
+                if (!string.IsNullOrEmpty(value))
+                {
+                    SetComponentValue(component, value);
+                }
 
                 // 生成唯一 ID 并存储映射
                 string componentId = Guid.NewGuid().ToString();
@@ -180,6 +246,53 @@ namespace grasshoppermcp.Tools
         }
 
         /// <summary>
+        /// 设置组件的值
+        /// </summary>
+        private static void SetComponentValue(IGH_DocumentObject component, string value)
+        {
+            if (component is IGH_Param param)
+            {
+                // 对于参数类型的组件
+                if (param is Param_Point pointParam)
+                {
+                    try
+                    {
+                        var pointCoords = JsonSerializer.Deserialize<PointCoordinates>(value);
+                        if (pointCoords != null)
+                        {
+                            var ghPoint = new GH_Point(new Point3d(pointCoords.X, pointCoords.Y, pointCoords.Z));
+                            pointParam.PersistentData.Clear();
+                            pointParam.PersistentData.Append(ghPoint);
+                        }
+                    }
+                    catch { /* 忽略反序列化错误 */ }
+                }
+                else if (param is Param_String panelParam)
+                {
+                    panelParam.PersistentData.Clear();
+                    panelParam.PersistentData.Append(new GH_String(value));
+                }
+                // 可以为其他参数类型添加更多逻辑
+            }
+            else if (component is GH_NumberSlider slider)
+            {
+                // 对于滑块组件
+                if (decimal.TryParse(value, out decimal sliderValue))
+                {
+                    slider.SetSliderValue(sliderValue);
+                }
+            }
+        }
+
+        // 用于反序列化点坐标的辅助类
+        private class PointCoordinates
+        {
+            public double X { get; set; }
+            public double Y { get; set; }
+            public double Z { get; set; }
+        }
+
+        /// <summary>
         /// 创建基础参数组件
         /// </summary>
         private static IGH_Param CreateParameterComponent(string name, string nickname)
@@ -268,6 +381,48 @@ namespace grasshoppermcp.Tools
             {
                 System.Diagnostics.Debug.WriteLine($"CreateParameterComponent 错误: {ex.Message}");
                 return new Param_GenericObject() { Name = name, NickName = nickname ?? name };
+            }
+        }
+
+        /// <summary>
+        /// 设置一个已存在组件的值或属性。
+        /// </summary>
+        /// <param name="component_id">要修改的组件的唯一ID。</param>
+        /// <param name="value">要设置的值。对于'slider'，这是一个数字；对于'panel'，这是一个字符串；对于'point'，这是一个JSON字符串，格式为'{\"X\":10,\"Y\":20,\"Z\":0}'。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>操作结果。</returns>
+        [McpServerTool(Name = "set_component_value")]
+        [Description("设置画布上一个已有组件的值。可用于设定点(point)的具体坐标、滑块(slider)的数值、面板(panel)的文本等。")]
+        public static Task<string> SetComponentValue(
+            [Description("要修改的组件的唯一ID。")] string component_id,
+            [Description("要设置的值。对于'slider'，这是一个数字；对于'panel'，这是一个字符串；对于'point'，这是一个JSON字符串，格式为'{\"X\":10,\"Y\":20,\"Z\":0}'。")] string value,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var document = Grasshopper.Instances.ActiveCanvas?.Document;
+                if (document == null)
+                {
+                    return Task.FromResult("错误：没有活动的 Grasshopper 文档。");
+                }
+
+                var component = FindComponentById(component_id, document);
+                if (component == null)
+                {
+                    return Task.FromResult($"错误：找不到ID为 '{component_id}' 的组件。");
+                }
+
+                SetComponentValue(component, value);
+
+                // 刷新画布以显示更改
+                component.ExpireSolution(true);
+                Grasshopper.Instances.ActiveCanvas?.Refresh();
+
+                return Task.FromResult($"成功：已设置组件 {component_id} 的值。");
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult($"错误：{ex.Message}");
             }
         }
 
@@ -433,6 +588,9 @@ namespace grasshoppermcp.Tools
             return null;
         }
 
+
+        //clear_document暂时废弃
+
         /// <summary>
         /// 清空 Grasshopper 文档
         /// </summary>
@@ -523,25 +681,51 @@ namespace grasshoppermcp.Tools
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>可用模式列表</returns>
         [McpServerTool(Name = "get_available_patterns")]
-        [Description("获取可用的 Grasshopper 组件模式")]
+        [Description("**必须首先调用** - 获取可用的 Grasshopper 组件模式列表。在使用 create_pattern 之前，请先调用此方法了解有哪些预定义模式可用。这样可以避免创建不支持的模式并获得更好的结果。")]
         public static Task<string> GetAvailablePatterns(
-            [Description("模式查询字符串")] string query,
+            [Description("（可选）搜索关键词，用于过滤特定类型的模式。例如：'point'、'line'、'3d' 等")] string query = "",
             CancellationToken cancellationToken = default)
         {
             try
             {
+                var usage_guide = @"
+🔧 推荐的工具使用顺序：
+1. add_component - 添加单个组件（最可靠）
+2. connect_components - 连接组件
+3. create_pattern - 仅用于预定义的复杂模式
+
+💡 最佳实践：
+- 简单需求：使用 add_component 逐个添加组件
+- 复杂设计：先查看下面的预定义模式，确认支持后再使用 create_pattern
+";
+
                 var patterns = new List<object>
                 {
-                    new { Name = "Basic Point", Description = "创建基本点组件" },
-                    new { Name = "Line Segment", Description = "创建线段组件" },
-                    new { Name = "Circle", Description = "创建圆形组件" },
-                    new { Name = "Rectangle", Description = "创建矩形组件" },
-                    new { Name = "Box", Description = "创建3D长方体/盒子组件" },
-                    new { Name = "Number Slider", Description = "创建数值滑块" },
-                    new { Name = "Panel", Description = "创建文本面板" },
-                    new { Name = "Point Grid", Description = "创建点阵模式" },
-                    new { Name = "Curve Division", Description = "创建曲线分割模式" },
-                    new { Name = "Voronoi Pattern", Description = "创建 Voronoi 图案" }
+                    new {
+                        Name = "Point Grid",
+                        Description = "创建点阵模式（包含X、Y数量滑块）",
+                        Usage = "适用于需要规律排列点的场景"
+                    },
+                    new {
+                        Name = "Line Segment",
+                        Description = "创建线段模式（包含起点、终点）",
+                        Usage = "适用于需要定义线段的场景"
+                    },
+                    new {
+                        Name = "Circle",
+                        Description = "创建圆形模式（包含中心点、半径滑块）",
+                        Usage = "适用于需要定义圆的场景"
+                    },
+                    new {
+                        Name = "Box",
+                        Description = "创建3D长方体模式（包含起点、尺寸滑块）",
+                        Usage = "适用于需要定义3D盒子的场景"
+                    },
+                    new {
+                        Name = "Voronoi Pattern",
+                        Description = "创建Voronoi图案模式（包含点集、边界）",
+                        Usage = "适用于需要Voronoi分割的场景"
+                    }
                 };
 
                 if (!string.IsNullOrEmpty(query))
@@ -556,7 +740,14 @@ namespace grasshoppermcp.Tools
                     }).ToList();
                 }
 
-                return Task.FromResult(JsonSerializer.Serialize(patterns, new JsonSerializerOptions { WriteIndented = true }));
+                var result = new
+                {
+                    Usage_Guide = usage_guide,
+                    Available_Patterns = patterns,
+                    Note = "⚠️ 对于简单需求，建议直接使用 add_component 而不是 create_pattern"
+                };
+
+                return Task.FromResult(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
             }
             catch (Exception ex)
             {
@@ -571,9 +762,9 @@ namespace grasshoppermcp.Tools
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>创建结果</returns>
         [McpServerTool(Name = "create_pattern")]
-        [Description("根据高级描述创建 Grasshopper 组件模式")]
+        [Description("⚠️ 高级功能 - 仅在调用 get_available_patterns 确认支持后使用。根据描述创建复杂的 Grasshopper 组件模式。对于简单单个组件，建议使用 add_component。对于复杂设计，请先调用 get_available_patterns 查看预定义模式。")]
         public static Task<string> CreatePattern(
-            [Description("模式的高级描述（如：'3D voronoi cube'）")] string description,
+            [Description("必须是 get_available_patterns 返回的模式名称之一，或者是明确的几何描述（如：'Point Grid'、'Voronoi Pattern'、'Box'）。不要使用模糊描述。")] string description,
             CancellationToken cancellationToken = default)
         {
             try
@@ -582,6 +773,32 @@ namespace grasshoppermcp.Tools
                 if (document == null)
                 {
                     return Task.FromResult("错误：没有活动的 Grasshopper 文档");
+                }
+
+                // 首先检查是否是支持的模式
+                var supportedPatterns = new[]
+                {
+                    "basic point", "point grid", "line segment", "circle", "rectangle",
+                    "box", "number slider", "panel", "curve division", "voronoi pattern"
+                };
+
+                var desc = description.ToLowerInvariant().Trim();
+
+                // 检查是否是已知模式
+                var isKnownPattern = supportedPatterns.Any(pattern =>
+                    desc.Contains(pattern) || pattern.Contains(desc));
+
+                if (!isKnownPattern && desc.Length < 5)
+                {
+                    return Task.FromResult($@"⚠️ 不建议使用模糊描述 '{description}'。
+
+建议的使用方法：
+1. 首先调用 get_available_patterns 查看支持的模式
+2. 然后使用返回的具体模式名称调用 create_pattern
+
+支持的模式包括：{string.Join("、", supportedPatterns)}
+
+或者使用 add_component 添加单个组件。");
                 }
 
                 // 根据描述分析并创建相应的模式

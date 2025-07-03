@@ -49,8 +49,8 @@ namespace grasshoppermcp.Prompts
 1. 检查当前文档状态
 2. 规划组件布局
 3. 逐步添加组件
-4. 设置参数值
-5. 建立连接
+4. **设置参数值**
+5. **建立连接**
 6. 验证结果
 
 ### 5. 连接规则
@@ -61,7 +61,17 @@ namespace grasshoppermcp.Prompts
 ## 设计意图
 用户的设计意图：{design_intent}
 
-请根据这个意图，制定合适的实现策略。";
+请根据这个意图，制定合适的实现策略。
+
+# 重点
+### 重要提示：
+- 对于需要平面输入的组件（如 Box、Circle、Rectangle 等），始终使用 “xy plane” 作为平面来源，而不是 Point 组件
+- 使用标准化的组件名称，如 xy plane, box, circle, number slider 等
+- 坐标值应该是数字，建议使用网格布局（x和y的间隔约为200-300单位）
+- 确保先创建所有元件，然后再进行连接
+- 对于平面到几何元件的连接，源参数应为 “Plane”，目标参数应为 “Base” 或 “Plane”
+
+";
 
             return Task.FromResult(systemMessage);
         }
