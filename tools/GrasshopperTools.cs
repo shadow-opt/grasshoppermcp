@@ -24,64 +24,6 @@ namespace grasshoppermcp.Tools
         private static readonly Dictionary<string, Guid> _componentMap = new Dictionary<string, Guid>();
 
         /// <summary>
-        /// 获取工具使用指南
-        /// </summary>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>使用指南</returns>
-        [McpServerTool(Name = "get_tool_guide")]
-        [Description("🚀 新手必看 - 获取 Grasshopper 工具的使用指南和最佳实践。如果您不确定应该使用哪个工具，请先调用此方法。")]
-        public static Task<string> GetToolGuide(CancellationToken cancellationToken = default)
-        {
-            var guide = @"
-🎯 Grasshopper MCP 工具使用指南
-
-📋 推荐的工作流程：
-1. get_document_info - 了解当前画布状态
-2. add_component - 添加单个组件（最常用、最可靠）
-3. connect_components - 连接组件
-4. 如需复杂模式：get_available_patterns → create_pattern
-
-🔧 工具选择指南：
-
-✅ 简单需求（推荐）：
-- 添加滑块、面板、点等 → 使用 add_component
-- 连接组件 → 使用 connect_components
-- 查看画布状态 → 使用 get_document_info
-
-⚠️ 复杂需求（谨慎使用）：
-- 预定义的复杂模式 → 先用 get_available_patterns，再用 create_pattern
-- 多个相关组件的组合 → 考虑多次使用 add_component
-
-❌ 不建议：
-- 直接使用 create_pattern 而不先查看可用模式
-- 对简单需求使用 create_pattern
-
-🎨 示例场景：
-
-场景1：创建一个数值滑块
-→ add_component(component_type='slider', x=100, y=100, value='10')
-
-场景2：创建滑块控制圆的半径
-→ 1. add_component('slider', 100, 100, '5') → 得到slider_id
-→ 2. add_component('point', 200, 100, '{""X"":0,""Y"":0,""Z"":0}') → 得到point_id  
-→ 3. add_component('circle', 300, 100) → 得到circle_id
-→ 4. connect_components(slider_id, circle_id, 'Value', 'Radius')
-→ 5. connect_components(point_id, circle_id, 'Point', 'Center')
-
-场景3：创建点阵（复杂模式）
-→ 1. get_available_patterns() → 查看可用模式
-→ 2. create_pattern('Point Grid') → 创建预定义的点阵模式
-
-💡 最佳实践：
-- 优先使用基础工具组合，而不是复杂的预设模式
-- 每次操作后可以用 get_document_info 查看结果
-- 组件坐标建议有合理间距（100-200像素）
-";
-
-            return Task.FromResult(guide);
-        }
-
-        /// <summary>
         /// 在 Grasshopper 画布上添加组件
         /// </summary>
         /// <param name="component_type">组件类型</param>
@@ -589,45 +531,45 @@ namespace grasshoppermcp.Tools
         }
 
 
-        //clear_document暂时废弃
+        // //clear_document暂时废弃
 
-        /// <summary>
-        /// 清空 Grasshopper 文档
-        /// </summary>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>操作结果</returns>
-        [McpServerTool(Name = "clear_document")]
-        [Description("清空当前 Grasshopper 文档")]
-        public static Task<string> ClearDocument(CancellationToken cancellationToken = default)
-        {
-            try
-            {
-                var document = Grasshopper.Instances.ActiveCanvas?.Document;
-                if (document == null)
-                {
-                    return Task.FromResult("错误：没有活动的 Grasshopper 文档");
-                }
+        // /// <summary>
+        // /// 清空 Grasshopper 文档
+        // /// </summary>
+        // /// <param name="cancellationToken">取消令牌</param>
+        // /// <returns>操作结果</returns>
+        // [McpServerTool(Name = "clear_document")]
+        // [Description("清空当前 Grasshopper 文档")]
+        // public static Task<string> ClearDocument(CancellationToken cancellationToken = default)
+        // {
+        //     try
+        //     {
+        //         var document = Grasshopper.Instances.ActiveCanvas?.Document;
+        //         if (document == null)
+        //         {
+        //             return Task.FromResult("错误：没有活动的 Grasshopper 文档");
+        //         }
 
-                // 获取所有对象并移除
-                var allObjects = document.Objects.ToList();
-                foreach (var obj in allObjects)
-                {
-                    document.RemoveObject(obj, false);
-                }
+        //         // 获取所有对象并移除
+        //         var allObjects = document.Objects.ToList();
+        //         foreach (var obj in allObjects)
+        //         {
+        //             document.RemoveObject(obj, false);
+        //         }
 
-                // 清空组件映射
-                _componentMap.Clear();
+        //         // 清空组件映射
+        //         _componentMap.Clear();
 
-                // 刷新画布
-                Grasshopper.Instances.ActiveCanvas?.Refresh();
+        //         // 刷新画布
+        //         Grasshopper.Instances.ActiveCanvas?.Refresh();
 
-                return Task.FromResult($"成功：已清空 Grasshopper 文档，移除了 {allObjects.Count} 个对象");
-            }
-            catch (Exception ex)
-            {
-                return Task.FromResult($"错误：{ex.Message}");
-            }
-        }
+        //         return Task.FromResult($"成功：已清空 Grasshopper 文档，移除了 {allObjects.Count} 个对象");
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         return Task.FromResult($"错误：{ex.Message}");
+        //     }
+        // }
 
         /// <summary>
         /// 获取 Grasshopper 文档信息
