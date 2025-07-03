@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Generic;
+using System.IO;
 using System.Drawing;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,7 +10,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol;
 using System.IO.Pipelines;
-
 
 namespace grasshoppermcp
 {
@@ -26,6 +24,8 @@ namespace grasshoppermcp
         /// </summary>
         private static bool isRunning = false;
         private static int grasshopperPort = 8080;
+        private static McpServer _server;
+        private readonly object _serverLock = new object();
         public grasshoppermcpComponent()
           : base("grasshoppermcpComponent", "ghmcp",
             "ModelContextProtocol Server Component",
@@ -69,67 +69,81 @@ namespace grasshoppermcp
         /// </summary>
         /// <param name="DA">The DA object can be used to retrieve data from input parameters and 
         /// to store data in output parameters.</param>
-        /// // ʵ�� IDisposable �ӿڵ� Dispose ����
-        
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             bool enabled = false;
             int port = grasshopperPort;
 
+
             if (!DA.GetData(0, ref enabled)) return;
             if (!DA.GetData(1, ref port)) return;
 
             grasshopperPort = port;
-            var mcpAddress = $"http://localhost:{grasshopperPort}";
+            var mcpAddress = $"http://localhost:{grasshopperPort}/";
 
-            HttpListener _httpListener = new();
-            _httpListener.Prefixes.Add(mcpAddress);
-            _httpListener.Start();
-            Pipe clientToServerPipe = new();
-            Pipe serverToClientPipe = new();
 
-            var builder = new ServiceCollection()
-                .AddMcpServer()
-                .WithStreamServerTransport(
-                    clientToServerPipe.Reader.AsStream(), // MCP����Ӵ˹ܵ���ȡ����
-                    serverToClientPipe.Writer.AsStream()); // MCP������˹ܵ�д����Ӧ
+            //HttpListener _httpListener = new();
+            //_httpListener.Prefixes.Add(mcpAddress);
+            //_httpListener.Start();
+            //Pipe clientToServerPipe = new();
+            //Pipe serverToClientPipe = new();
+
+            //var builder = new ServiceCollection()
+            //    .AddMcpServer()
+            //    .WithStreamServerTransport(
+            //        clientToServerPipe.Reader.AsStream(), 
+            //        serverToClientPipe.Writer.AsStream()); 
 
             //builder.WithToolsFromAssembly();
+            // if (enabled && !isRunning)
+            // {
+            //     isRunning = true;
+            //     DA.SetData(0, $"Running on {mcpAddress}");
+            //     _server.Start(mcpAddress);
+            // }
+            // else if (!enabled && isRunning)
+            // {
+            //     isRunning = false;
+            //     DA.SetData(0, "Stopped");
+            //     _server.Stop();
+            // }
+            // else if (enabled && isRunning)
+            // {
+            //     DA.SetData(0, $"Running on {mcpAddress}");
+            // }
+            // else
+            // {
+            //     DA.SetData(0, "Stopped");
+            // }
+            lock (_serverLock)
+            {
+                // _isrunning 应该是你组件的一个成员变量
+                bool serverIsActuallyRunning = (_server != null && _server.IsListening);
 
+                if (enabled && !serverIsActuallyRunning)
+                {
+                    // 需要启动
+                    try
+                    {
+                        // 如果 _server 是 null，需要先创建实例
+                        if (_server == null) _server = new McpServer();
+                        _server.Start(mcpAddress);
+                    }
+                    catch (Exception ex)
+                    {
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
+                    }
+                }
+                else if (!enabled && serverIsActuallyRunning)
+                {
+                    // 需要停止
+                    _server?.Stop(); // 使用 ?. 来避免 _server 本身为 null 的情况
+                }
 
+                // 更新组件状态信息
+                this.Message = (_server != null && _server.IsListening) ? "Running" : "Stopped";
+            }
 
-
-
-
-
-            //builder.Services.AddMcpServer()
-            //                .WithHttpTransport();
-            ////.WithTools<EchoTool>()
-            ////.WithTools<SampleLlmTool>()
-            ////.WithResources<SimpleResourceType>();
-            ////.WithResources<SimpleResourceType>();
-            //var app = builder.Build();
-            //app.MapMcp();
-            //if (enabled && !isRunning)
-            //{
-            //    isRunning = true;
-            //    app.Run($"http://localhost:{grasshopperPort}");
-            //    DA.SetData(0, $"Running on http://localhost:{grasshopperPort}");
-            //}
-            //else if (!enabled && isRunning)
-            //{
-            //    isRunning = false;
-            //    //stop?
-            //    DA.SetData(0, "Stopped");
-            //}
-            //else if (enabled && isRunning)
-            //{
-            //    DA.SetData(0, $"Running on http://localhost:{grasshopperPort}");
-            //}
-            //else
-            //{
-            //    DA.SetData(0, "Stopped");
-            //}
 
         }
 
