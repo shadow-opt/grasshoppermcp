@@ -156,5 +156,62 @@ namespace grasshoppermcp.Resources
                 return Task.FromResult($"错误：{ex.Message}");
             }
         }
+
+        /// <summary>
+        /// 获取故障排除指南
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>故障排除指南</returns>
+        [McpServerResource(UriTemplate = "grasshopper://troubleshooting")]
+        [Description("获取 Grasshopper MCP 故障排除指南")]
+        public static Task<string> GetTroubleshootingGuide(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var guide = new
+                {
+                    Title = "Grasshopper MCP 故障排除指南",
+                    CommonIssues = new[]
+                    {
+                        new {
+                            Issue = "add_component 失败",
+                            Solution = "请先运行 diagnose_environment 检查环境，然后尝试 test_simple_add"
+                        },
+                        new {
+                            Issue = "Object reference not set to an instance of an object",
+                            Solution = "确保 Grasshopper 已启动且有活动文档，检查 ActiveCanvas 和 Document 状态"
+                        },
+                        new {
+                            Issue = "组件未显示在画布上",
+                            Solution = "检查组件位置是否在可见区域，尝试缩放画布或使用 get_document_info 确认组件已添加"
+                        },
+                        new {
+                            Issue = "连接组件失败",
+                            Solution = "确保源组件和目标组件都存在，使用正确的组件ID或参数名称"
+                        }
+                    },
+                    TestingSteps = new[]
+                    {
+                        "1. 运行 diagnose_environment 检查环境",
+                        "2. 运行 test_simple_add 进行基础测试",
+                        "3. 尝试 add_component 添加简单组件",
+                        "4. 使用 get_document_info 确认组件已添加",
+                        "5. 尝试 create_pattern 创建复杂模式"
+                    },
+                    SupportedComponents = new[]
+                    {
+                        "point", "curve", "surface", "mesh", "number", "integer",
+                        "boolean", "text", "panel", "slider", "vector", "plane",
+                        "color", "interval", "matrix", "transform", "geometry", "brep"
+                    }
+                };
+
+                return Task.FromResult(JsonSerializer.Serialize(guide, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult($"错误：{ex.Message}");
+            }
+        }
     }
 }

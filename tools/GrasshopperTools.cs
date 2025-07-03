@@ -21,7 +21,7 @@ namespace grasshoppermcp.Tools
     {
         // 存储组件 ID 映射
         private static readonly Dictionary<string, Guid> _componentMap = new Dictionary<string, Guid>();
-        
+
         /// <summary>
         /// 在 Grasshopper 画布上添加组件
         /// </summary>
@@ -40,18 +40,30 @@ namespace grasshoppermcp.Tools
         {
             try
             {
+                // 详细检查 Grasshopper 环境
+                if (Grasshopper.Instances.ActiveCanvas == null)
+                {
+                    return Task.FromResult("错误：Grasshopper 画布未初始化。请确保 Grasshopper 已正确启动。");
+                }
+
                 // 获取当前的 Grasshopper 文档
-                var document = Grasshopper.Instances.ActiveCanvas?.Document;
+                var document = Grasshopper.Instances.ActiveCanvas.Document;
                 if (document == null)
                 {
-                    return Task.FromResult("错误：没有活动的 Grasshopper 文档");
+                    return Task.FromResult("错误：没有活动的 Grasshopper 文档。请在 Grasshopper 中创建一个新文档。");
                 }
 
                 // 根据组件类型创建相应的组件
                 IGH_DocumentObject component = CreateComponentByType(component_type);
                 if (component == null)
                 {
-                    return Task.FromResult($"错误：不支持的组件类型 '{component_type}'");
+                    return Task.FromResult($"错误：不支持的组件类型 '{component_type}'。支持的类型包括：point, curve, circle, line, panel, slider, rectangle, surface, mesh, vector, integer, boolean, color, plane, box, sphere, cylinder");
+                }
+
+                // 确保组件有有效的属性
+                if (component.Attributes == null)
+                {
+                    component.CreateAttributes();
                 }
 
                 // 设置组件位置
@@ -59,19 +71,19 @@ namespace grasshoppermcp.Tools
 
                 // 添加到文档
                 document.AddObject(component, false);
-                
+
                 // 生成唯一 ID 并存储映射
                 string componentId = Guid.NewGuid().ToString();
                 _componentMap[componentId] = component.InstanceGuid;
 
                 // 刷新画布
-                Grasshopper.Instances.ActiveCanvas?.Refresh();
+                Grasshopper.Instances.ActiveCanvas.Refresh();
 
                 return Task.FromResult($"成功：在位置 ({x}, {y}) 添加了 {component_type} 组件，ID: {componentId}");
             }
             catch (Exception ex)
             {
-                return Task.FromResult($"错误：{ex.Message}");
+                return Task.FromResult($"错误：{ex.Message}\n详细信息：{ex.StackTrace}");
             }
         }
 
@@ -131,24 +143,39 @@ namespace grasshoppermcp.Tools
         {
             try
             {
-                // 尝试从组件服务器获取组件
+                // 检查组件服务器是否可用
                 var componentServer = Grasshopper.Instances.ComponentServer;
-                var componentProxy = componentServer.ObjectProxies.FirstOrDefault(p => 
-                    p.Desc.Category == category && 
-                    p.Desc.SubCategory == subcategory && 
+                if (componentServer == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("组件服务器不可用");
+                    return CreateParameterComponent(name, nickname);
+                }
+
+                // 尝试从组件服务器获取组件
+                var componentProxy = componentServer.ObjectProxies.FirstOrDefault(p =>
+                    p.Desc.Category == category &&
+                    p.Desc.SubCategory == subcategory &&
                     (p.Desc.Name == name || p.Desc.NickName == nickname));
 
                 if (componentProxy != null)
                 {
-                    return componentProxy.CreateInstance();
+                    var instance = componentProxy.CreateInstance();
+                    if (instance != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"成功创建组件: {name}");
+                        return instance;
+                    }
                 }
 
                 // 如果找不到，尝试创建基础参数组件
+                System.Diagnostics.Debug.WriteLine($"未找到组件 {category}/{subcategory}/{name}，创建参数组件");
                 return CreateParameterComponent(name, nickname);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return null;
+                // 记录错误并返回参数组件
+                System.Diagnostics.Debug.WriteLine($"CreateComponent 错误: {ex.Message}");
+                return CreateParameterComponent(name, nickname);
             }
         }
 
@@ -157,46 +184,90 @@ namespace grasshoppermcp.Tools
         /// </summary>
         private static IGH_Param CreateParameterComponent(string name, string nickname)
         {
-            switch (name.ToLowerInvariant())
+            try
             {
-                case "point":
-                    return new Param_Point() { Name = name, NickName = nickname };
-                case "curve":
-                    return new Param_Curve() { Name = name, NickName = nickname };
-                case "surface":
-                    return new Param_Surface() { Name = name, NickName = nickname };
-                case "mesh":
-                    return new Param_Mesh() { Name = name, NickName = nickname };
-                case "number":
-                    return new Param_Number() { Name = name, NickName = nickname };
-                case "integer":
-                    return new Param_Integer() { Name = name, NickName = nickname };
-                case "text":
-                case "string":
-                    return new Param_String() { Name = name, NickName = nickname };
-                case "boolean":
-                    return new Param_Boolean() { Name = name, NickName = nickname };
-                case "vector":
-                    return new Param_Vector() { Name = name, NickName = nickname };
-                case "plane":
-                    return new Param_Plane() { Name = name, NickName = nickname };
-                case "color":
-                case "colour":
-                    return new Param_Colour() { Name = name, NickName = nickname };
-                case "domain":
-                    return new Param_Interval() { Name = name, NickName = nickname };
-                case "interval":
-                    return new Param_Interval() { Name = name, NickName = nickname };
-                case "matrix":
-                    return new Param_Matrix() { Name = name, NickName = nickname };
-                case "transform":
-                    return new Param_Transform() { Name = name, NickName = nickname };
-                case "geometry":
-                    return new Param_Geometry() { Name = name, NickName = nickname };
-                case "brep":
-                    return new Param_Brep() { Name = name, NickName = nickname };
-                default:
-                    return new Param_GenericObject() { Name = name, NickName = nickname };
+                IGH_Param param = null;
+
+                switch (name.ToLowerInvariant())
+                {
+                    case "point":
+                    case "pt":
+                        param = new Param_Point();
+                        break;
+                    case "curve":
+                    case "crv":
+                        param = new Param_Curve();
+                        break;
+                    case "surface":
+                    case "srf":
+                        param = new Param_Surface();
+                        break;
+                    case "mesh":
+                    case "m":
+                        param = new Param_Mesh();
+                        break;
+                    case "number":
+                    case "num":
+                        param = new Param_Number();
+                        break;
+                    case "integer":
+                    case "int":
+                        param = new Param_Integer();
+                        break;
+                    case "text":
+                    case "string":
+                    case "panel":
+                        param = new Param_String();
+                        break;
+                    case "boolean":
+                    case "bool":
+                        param = new Param_Boolean();
+                        break;
+                    case "vector":
+                    case "v":
+                        param = new Param_Vector();
+                        break;
+                    case "plane":
+                    case "pl":
+                        param = new Param_Plane();
+                        break;
+                    case "color":
+                    case "colour":
+                        param = new Param_Colour();
+                        break;
+                    case "interval":
+                        param = new Param_Interval();
+                        break;
+                    case "matrix":
+                        param = new Param_Matrix();
+                        break;
+                    case "transform":
+                        param = new Param_Transform();
+                        break;
+                    case "geometry":
+                        param = new Param_Geometry();
+                        break;
+                    case "brep":
+                        param = new Param_Brep();
+                        break;
+                    default:
+                        param = new Param_GenericObject();
+                        break;
+                }
+
+                if (param != null)
+                {
+                    param.Name = name;
+                    param.NickName = nickname ?? name;
+                    System.Diagnostics.Debug.WriteLine($"成功创建参数组件: {name}");
+                }
+
+                return param;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"CreateParameterComponent 错误: {ex.Message}");
+                return new Param_GenericObject() { Name = name, NickName = nickname ?? name };
             }
         }
 
@@ -302,7 +373,7 @@ namespace grasshoppermcp.Tools
                 if (!string.IsNullOrEmpty(paramName))
                 {
                     // 按名称查找
-                    return ghComponent.Params.Output.FirstOrDefault(p => 
+                    return ghComponent.Params.Output.FirstOrDefault(p =>
                         p.Name.Equals(paramName, StringComparison.OrdinalIgnoreCase) ||
                         p.NickName.Equals(paramName, StringComparison.OrdinalIgnoreCase));
                 }
@@ -336,7 +407,7 @@ namespace grasshoppermcp.Tools
                 if (!string.IsNullOrEmpty(paramName))
                 {
                     // 按名称查找
-                    return ghComponent.Params.Input.FirstOrDefault(p => 
+                    return ghComponent.Params.Input.FirstOrDefault(p =>
                         p.Name.Equals(paramName, StringComparison.OrdinalIgnoreCase) ||
                         p.NickName.Equals(paramName, StringComparison.OrdinalIgnoreCase));
                 }
@@ -383,7 +454,7 @@ namespace grasshoppermcp.Tools
                 {
                     document.RemoveObject(obj, false);
                 }
-                
+
                 // 清空组件映射
                 _componentMap.Clear();
 
@@ -420,14 +491,15 @@ namespace grasshoppermcp.Tools
                     IsDocumentActive = document != null,
                     DocumentName = document.DisplayName ?? "未命名文档",
                     ComponentCount = document.ObjectCount,
-                    Objects = document.Objects.Select(obj => new {
+                    Objects = document.Objects.Select(obj => new
+                    {
                         Id = obj.InstanceGuid.ToString(),
                         Name = obj.Name,
                         NickName = obj.NickName,
                         Type = obj.GetType().Name,
                         Category = obj.Category,
                         SubCategory = obj.SubCategory,
-                        Position = obj.Attributes?.Pivot != null ? 
+                        Position = obj.Attributes?.Pivot != null ?
                             new { X = obj.Attributes.Pivot.X, Y = obj.Attributes.Pivot.Y } : null
                     }).ToList(),
                     GrasshopperVersion = typeof(Grasshopper.Instances).Assembly.GetName().Version?.ToString(),
@@ -471,7 +543,7 @@ namespace grasshoppermcp.Tools
 
                 if (!string.IsNullOrEmpty(query))
                 {
-                    patterns = patterns.Where(p => 
+                    patterns = patterns.Where(p =>
                         ((dynamic)p).Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                         ((dynamic)p).Description.Contains(query, StringComparison.OrdinalIgnoreCase)
                     ).ToList();
@@ -507,7 +579,7 @@ namespace grasshoppermcp.Tools
 
                 // 根据描述分析并创建相应的模式
                 var result = CreatePatternByDescription(description, document);
-                
+
                 // 刷新画布
                 Grasshopper.Instances.ActiveCanvas?.Refresh();
 
@@ -524,6 +596,11 @@ namespace grasshoppermcp.Tools
         /// </summary>
         private static string CreatePatternByDescription(string description, GH_Document document)
         {
+            if (document == null)
+            {
+                return "错误：文档为空";
+            }
+
             var desc = description.ToLowerInvariant();
             var createdComponents = new List<string>();
 
@@ -549,6 +626,11 @@ namespace grasshoppermcp.Tools
                     // 创建 Voronoi 模式
                     return CreateVoronoiPattern(document);
                 }
+                else if (desc.Contains("box") || desc.Contains("rectangular"))
+                {
+                    // 创建长方体模式
+                    return CreateBoxPattern(document);
+                }
                 else
                 {
                     // 默认创建基础模式
@@ -557,7 +639,7 @@ namespace grasshoppermcp.Tools
             }
             catch (Exception ex)
             {
-                return $"创建模式时出错：{ex.Message}";
+                return $"创建模式时出错：{ex.Message}\n详细信息：{ex.StackTrace}";
             }
         }
 
@@ -674,6 +756,67 @@ namespace grasshoppermcp.Tools
         }
 
         /// <summary>
+        /// 创建长方体模式
+        /// </summary>
+        private static string CreateBoxPattern(GH_Document document)
+        {
+            var components = new List<string>();
+
+            try
+            {
+                // 创建起始点参数
+                var originPoint = CreateParameterComponent("point", "Origin");
+                if (originPoint != null)
+                {
+                    if (originPoint.Attributes == null)
+                        originPoint.CreateAttributes();
+                    originPoint.Attributes.Pivot = new System.Drawing.PointF(50, 100);
+                    document.AddObject(originPoint, false);
+                    components.Add("起始点");
+                }
+
+                // 创建X尺寸滑块
+                var xSlider = CreateParameterComponent("number", "X Size");
+                if (xSlider != null)
+                {
+                    if (xSlider.Attributes == null)
+                        xSlider.CreateAttributes();
+                    xSlider.Attributes.Pivot = new System.Drawing.PointF(50, 150);
+                    document.AddObject(xSlider, false);
+                    components.Add("X尺寸滑块");
+                }
+
+                // 创建Y尺寸滑块
+                var ySlider = CreateParameterComponent("number", "Y Size");
+                if (ySlider != null)
+                {
+                    if (ySlider.Attributes == null)
+                        ySlider.CreateAttributes();
+                    ySlider.Attributes.Pivot = new System.Drawing.PointF(50, 200);
+                    document.AddObject(ySlider, false);
+                    components.Add("Y尺寸滑块");
+                }
+
+                // 创建Z尺寸滑块
+                var zSlider = CreateParameterComponent("number", "Z Size");
+                if (zSlider != null)
+                {
+                    if (zSlider.Attributes == null)
+                        zSlider.CreateAttributes();
+                    zSlider.Attributes.Pivot = new System.Drawing.PointF(50, 250);
+                    document.AddObject(zSlider, false);
+                    components.Add("Z尺寸滑块");
+                }
+
+                return $"成功创建长方体模式，包含组件：{string.Join(", ", components)}";
+            }
+            catch (Exception ex)
+            {
+                return $"创建长方体模式时出错：{ex.Message}";
+            }
+        }
+
+        /// <summary>
         /// 创建基础模式
         /// </summary>
         private static string CreateBasicPattern(GH_Document document)
@@ -699,6 +842,85 @@ namespace grasshoppermcp.Tools
             }
 
             return $"成功创建基础模式，包含组件：{string.Join(", ", components)}";
+        }
+
+        /// <summary>
+        /// 诊断 Grasshopper 环境状态
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>诊断信息</returns>
+        [McpServerTool(Name = "diagnose_environment")]
+        [Description("诊断 Grasshopper 环境状态")]
+        public static Task<string> DiagnoseEnvironment(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var diagnostics = new
+                {
+                    GrasshopperInstancesExists = typeof(Grasshopper.Instances) != null,
+                    ActiveCanvasExists = Grasshopper.Instances.ActiveCanvas != null,
+                    DocumentExists = Grasshopper.Instances.ActiveCanvas?.Document != null,
+                    ComponentServerExists = Grasshopper.Instances.ComponentServer != null,
+                    RhinoDocExists = Rhino.RhinoDoc.ActiveDoc != null,
+                    GrasshopperVersion = Grasshopper.Versioning.Version.ToString(),
+                    RhinoVersion = Rhino.RhinoApp.Version.ToString(),
+                    CurrentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                };
+
+                return Task.FromResult(JsonSerializer.Serialize(diagnostics, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult($"诊断失败：{ex.Message}\n堆栈跟踪：{ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// 简单测试工具，直接创建参数组件
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>测试结果</returns>
+        [McpServerTool(Name = "test_simple_add")]
+        [Description("简单测试工具，直接添加参数组件")]
+        public static Task<string> TestSimpleAdd(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                // 检查基本环境
+                if (Grasshopper.Instances.ActiveCanvas == null)
+                {
+                    return Task.FromResult("错误：ActiveCanvas 为空");
+                }
+
+                var document = Grasshopper.Instances.ActiveCanvas.Document;
+                if (document == null)
+                {
+                    return Task.FromResult("错误：Document 为空");
+                }
+
+                // 直接创建一个简单的参数组件
+                var param = new Param_Point();
+                param.Name = "Test Point";
+                param.NickName = "Test";
+
+                // 创建属性
+                param.CreateAttributes();
+
+                // 设置位置
+                param.Attributes.Pivot = new System.Drawing.PointF(200, 200);
+
+                // 添加到文档
+                document.AddObject(param, false);
+
+                // 刷新画布
+                Grasshopper.Instances.ActiveCanvas.Refresh();
+
+                return Task.FromResult($"成功：添加了测试点参数，ID: {param.InstanceGuid}");
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult($"测试失败：{ex.Message}\n详细信息：{ex.StackTrace}");
+            }
         }
     }
 }
