@@ -2,6 +2,7 @@
 using ModelContextProtocol.Server;
 using grasshoppermcp.Tools;
 using grasshoppermcp.Resources;
+using grasshoppermcp.Prompts;
 using System;
 using System.IO;
 using System.IO.Pipelines;
@@ -42,14 +43,15 @@ public class McpServer : IDisposable
         _httpListener.Start();
         RhinoApp.WriteLine($"MCP Server started at {address}");
 
-        // 【核心改变】我们将手动配置，然后注册
+        //手动配置，然后注册
         var services = new ServiceCollection();
 
-        // 直接注册 MCP 服务器，不需要 McpServerOptions 和 ServerInfo（在 0.3.0-preview.1 版本中不存在）
+        // 直接注册不需要 McpServerOptions 和 ServerInfo
         services.AddMcpServer()
             .WithStreamServerTransport(clientToServerPipe.Reader.AsStream(), serverToClientPipe.Writer.AsStream())
             .WithTools<GrasshopperTools>()
-            .WithResources<GrasshopperResources>();
+            .WithResources<GrasshopperResources>()
+            .WithPrompts<GrasshopperPrompts>();
 
         // 构建服务容器
         _serviceProvider = services.BuildServiceProvider();

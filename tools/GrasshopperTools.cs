@@ -31,11 +31,11 @@ namespace grasshoppermcp.Tools
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>操作结果</returns>
         [McpServerTool(Name = "add_component")]
-        [Description("在 Grasshopper 画布上添加组件")]
+        [Description("在 Grasshopper 画布的指定位置添加一个组件。使用前请先读取 grasshopper://current_document 资源了解当前画布状态。支持的组件类型包括：slider（数值滑块）、panel（文本面板）、point（点）、circle（圆）、line（直线）、curve（曲线）等。成功后返回组件的唯一ID，用于后续连接操作。")]
         public static Task<string> AddComponent(
-            [Description("组件类型（point, curve, circle, line, panel, slider）")] string component_type,
-            [Description("X 坐标")] double x,
-            [Description("Y 坐标")] double y,
+            [Description("组件类型。常用类型：slider（数值滑块，用于提供数值输入）、panel（文本面板，用于显示信息）、point（点几何）、circle（圆几何）、line（直线几何）、curve（曲线几何）、voronoi（泰森多边形）、delaunay（德劳内三角剖分）")] string component_type,
+            [Description("组件在画布上的X坐标位置（像素单位）")] double x,
+            [Description("组件在画布上的Y坐标位置（像素单位）")] double y,
             CancellationToken cancellationToken = default)
         {
             try
@@ -283,14 +283,14 @@ namespace grasshoppermcp.Tools
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>操作结果</returns>
         [McpServerTool(Name = "connect_components")]
-        [Description("连接两个 Grasshopper 组件")]
+        [Description("连接两个 Grasshopper 组件的输出和输入参数。使用前必须先读取 grasshopper://current_document 资源来确认组件存在并获取准确的参数名称。常见连接：滑块的 'Value' 输出 → 圆的 'Radius' 输入；点的 'Point' 输出 → 圆的 'Center' 输入；几何体的 'Geometry' 输出 → 变换的 'Geometry' 输入。")]
         public static Task<string> ConnectComponents(
-            [Description("源组件ID")] string source_id,
-            [Description("目标组件ID")] string target_id,
-            [Description("源参数名称（可选）")] string source_param = null,
-            [Description("目标参数名称（可选）")] string target_param = null,
-            [Description("源参数索引（可选）")] int? source_param_index = null,
-            [Description("目标参数索引（可选）")] int? target_param_index = null,
+            [Description("源组件的唯一ID（从 add_component 工具获得或从 grasshopper://current_document 资源中查找）")] string source_id,
+            [Description("目标组件的唯一ID（从 add_component 工具获得或从 grasshopper://current_document 资源中查找）")] string target_id,
+            [Description("源组件的输出参数名称。常见名称：Value（滑块输出）、Point（点输出）、Geometry（几何体输出）、Circle（圆输出）。如不确定请先读取当前文档")] string source_param = null,
+            [Description("目标组件的输入参数名称。常见名称：Radius（半径输入）、Center（圆心输入）、Geometry（几何体输入）。如不确定请先读取当前文档")] string target_param = null,
+            [Description("源参数索引（可选，当无法通过名称匹配时使用）")] int? source_param_index = null,
+            [Description("目标参数索引（可选，当无法通过名称匹配时使用）")] int? target_param_index = null,
             CancellationToken cancellationToken = default)
         {
             try
@@ -319,14 +319,16 @@ namespace grasshoppermcp.Tools
                 IGH_Param sourceOutput = GetOutputParameter(sourceComponent, source_param, source_param_index);
                 if (sourceOutput == null)
                 {
-                    return Task.FromResult("错误：找不到有效的源输出参数");
+                    var availableOutputs = GetAvailableOutputs(sourceComponent);
+                    return Task.FromResult($"错误：找不到有效的源输出参数。可用的输出参数：{availableOutputs}");
                 }
 
                 // 获取目标输入参数
                 IGH_Param targetInput = GetInputParameter(targetComponent, target_param, target_param_index);
                 if (targetInput == null)
                 {
-                    return Task.FromResult("错误：找不到有效的目标输入参数");
+                    var availableInputs = GetAvailableInputs(targetComponent);
+                    return Task.FromResult($"错误：找不到有效的目标输入参数。可用的输入参数：{availableInputs}");
                 }
 
                 // 建立连接
@@ -475,7 +477,7 @@ namespace grasshoppermcp.Tools
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>文档信息</returns>
         [McpServerTool(Name = "get_document_info")]
-        [Description("获取当前 Grasshopper 文档信息")]
+        [Description("获取当前 Grasshopper 文档的基本信息，包括组件数量和组件列表。这是一个简化版本，如需要详细的组件参数和连接信息，请使用 grasshopper://current_document 资源。")]
         public static Task<string> GetDocumentInfo(CancellationToken cancellationToken = default)
         {
             try
@@ -534,6 +536,7 @@ namespace grasshoppermcp.Tools
                     new { Name = "Line Segment", Description = "创建线段组件" },
                     new { Name = "Circle", Description = "创建圆形组件" },
                     new { Name = "Rectangle", Description = "创建矩形组件" },
+                    new { Name = "Box", Description = "创建3D长方体/盒子组件" },
                     new { Name = "Number Slider", Description = "创建数值滑块" },
                     new { Name = "Panel", Description = "创建文本面板" },
                     new { Name = "Point Grid", Description = "创建点阵模式" },
@@ -544,9 +547,13 @@ namespace grasshoppermcp.Tools
                 if (!string.IsNullOrEmpty(query))
                 {
                     patterns = patterns.Where(p =>
-                        ((dynamic)p).Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                        ((dynamic)p).Description.Contains(query, StringComparison.OrdinalIgnoreCase)
-                    ).ToList();
+                    {
+                        var pattern = (dynamic)p;
+                        string name = pattern.Name?.ToString() ?? "";
+                        string desc = pattern.Description?.ToString() ?? "";
+                        return name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                               desc.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+                    }).ToList();
                 }
 
                 return Task.FromResult(JsonSerializer.Serialize(patterns, new JsonSerializerOptions { WriteIndented = true }));
@@ -921,6 +928,46 @@ namespace grasshoppermcp.Tools
             {
                 return Task.FromResult($"测试失败：{ex.Message}\n详细信息：{ex.StackTrace}");
             }
+        }
+
+        /// <summary>
+        /// 获取组件的可用输出参数列表
+        /// </summary>
+        private static string GetAvailableOutputs(IGH_DocumentObject component)
+        {
+            var outputs = new List<string>();
+
+            if (component is IGH_Component comp)
+            {
+                foreach (var param in comp.Params.Output)
+                {
+                    outputs.Add($"'{param.Name}' ({param.NickName})");
+                }
+            }
+            else if (component is IGH_Param param)
+            {
+                outputs.Add($"'{param.Name}' ({param.NickName})");
+            }
+
+            return outputs.Count > 0 ? string.Join(", ", outputs) : "无可用输出参数";
+        }
+
+        /// <summary>
+        /// 获取组件的可用输入参数列表
+        /// </summary>
+        private static string GetAvailableInputs(IGH_DocumentObject component)
+        {
+            var inputs = new List<string>();
+
+            if (component is IGH_Component comp)
+            {
+                foreach (var param in comp.Params.Input)
+                {
+                    inputs.Add($"'{param.Name}' ({param.NickName})");
+                }
+            }
+
+            return inputs.Count > 0 ? string.Join(", ", inputs) : "无可用输入参数";
         }
     }
 }

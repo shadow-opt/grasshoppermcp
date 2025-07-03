@@ -4,6 +4,10 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Threading;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using Grasshopper.Kernel;
+using Grasshopper.Kernel.Parameters;
 
 namespace grasshoppermcp.Resources
 {
@@ -150,6 +154,169 @@ namespace grasshoppermcp.Resources
                 };
 
                 return Task.FromResult(JsonSerializer.Serialize(environment, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult($"错误：{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 获取当前 Grasshopper 文档的详细信息
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>当前文档的详细信息</returns>
+        [McpServerResource(UriTemplate = "grasshopper://current_document")]
+        [Description("获取当前 Grasshopper 文档的详细信息，包括所有组件、位置、参数和连接")]
+        public static Task<string> GetCurrentDocument(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var document = Grasshopper.Instances.ActiveCanvas?.Document;
+                if (document == null)
+                {
+                    return Task.FromResult(JsonSerializer.Serialize(new
+                    {
+                        error = "没有活动的 Grasshopper 文档",
+                        components = new object[0],
+                        connections = new object[0]
+                    }, new JsonSerializerOptions { WriteIndented = true }));
+                }
+
+                var components = new List<object>();
+                var connections = new List<object>();
+
+                // 遍历所有组件
+                foreach (var obj in document.Objects)
+                {
+                    if (obj is IGH_Component component)
+                    {
+                        var inputs = new List<object>();
+                        var outputs = new List<object>();
+
+                        // 收集输入参数
+                        foreach (var param in component.Params.Input)
+                        {
+                            inputs.Add(new
+                            {
+                                name = param.Name,
+                                nickname = param.NickName,
+                                type = param.Type.Name,
+                                isConnected = param.Sources.Count > 0,
+                                sourceCount = param.Sources.Count,
+                                description = param.Description
+                            });
+                        }
+
+                        // 收集输出参数
+                        foreach (var param in component.Params.Output)
+                        {
+                            outputs.Add(new
+                            {
+                                name = param.Name,
+                                nickname = param.NickName,
+                                type = param.Type.Name,
+                                isConnected = param.Recipients.Count > 0,
+                                recipientCount = param.Recipients.Count,
+                                description = param.Description
+                            });
+                        }
+
+                        components.Add(new
+                        {
+                            id = component.InstanceGuid.ToString(),
+                            name = component.Name,
+                            nickname = component.NickName,
+                            category = component.Category,
+                            subcategory = component.SubCategory,
+                            position = new
+                            {
+                                x = component.Attributes.Pivot.X,
+                                y = component.Attributes.Pivot.Y
+                            },
+                            inputs,
+                            outputs,
+                            description = component.Description
+                        });
+
+                        // 收集连接信息
+                        foreach (var output in component.Params.Output)
+                        {
+                            foreach (var recipient in output.Recipients)
+                            {
+                                connections.Add(new
+                                {
+                                    sourceId = component.InstanceGuid.ToString(),
+                                    sourceParam = output.Name,
+                                    sourceParamNickname = output.NickName,
+                                    targetId = recipient.Attributes.GetTopLevel.DocObject.InstanceGuid.ToString(),
+                                    targetParam = recipient.Name,
+                                    targetParamNickname = recipient.NickName
+                                });
+                            }
+                        }
+                    }
+                    else if (obj is IGH_Param param)
+                    {
+                        // 处理参数组件（如滑块、面板等）
+                        var outputs = new List<object>();
+
+                        // 对于参数，它们通常只有一个输出
+                        outputs.Add(new
+                        {
+                            name = param.Name,
+                            nickname = param.NickName,
+                            type = param.Type.Name,
+                            isConnected = param.Recipients.Count > 0,
+                            recipientCount = param.Recipients.Count,
+                            description = param.Description
+                        });
+
+                        components.Add(new
+                        {
+                            id = param.InstanceGuid.ToString(),
+                            name = param.Name,
+                            nickname = param.NickName,
+                            category = param.Category,
+                            subcategory = param.SubCategory,
+                            position = new
+                            {
+                                x = param.Attributes.Pivot.X,
+                                y = param.Attributes.Pivot.Y
+                            },
+                            inputs = new object[0],
+                            outputs,
+                            description = param.Description,
+                            isParameter = true
+                        });
+
+                        // 收集参数的连接信息
+                        foreach (var recipient in param.Recipients)
+                        {
+                            connections.Add(new
+                            {
+                                sourceId = param.InstanceGuid.ToString(),
+                                sourceParam = param.Name,
+                                sourceParamNickname = param.NickName,
+                                targetId = recipient.Attributes.GetTopLevel.DocObject.InstanceGuid.ToString(),
+                                targetParam = recipient.Name,
+                                targetParamNickname = recipient.NickName
+                            });
+                        }
+                    }
+                }
+
+                var documentInfo = new
+                {
+                    documentName = document.DisplayName,
+                    componentCount = components.Count,
+                    connectionCount = connections.Count,
+                    components,
+                    connections,
+                    timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC")
+                };
+
+                return Task.FromResult(JsonSerializer.Serialize(documentInfo, new JsonSerializerOptions { WriteIndented = true }));
             }
             catch (Exception ex)
             {
