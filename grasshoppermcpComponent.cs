@@ -22,7 +22,7 @@ namespace grasshoppermcp
         /// Subcategory the panel. If you use non-existing tab or panel names, 
         /// new tabs/panels will automatically be created.
         /// </summary>
-        private static bool isRunning = false;
+        private static volatile bool isRunning = false;
         private static int grasshopperPort = 8080;
         private static McpServer _server;
         private readonly object _serverLock = new object();

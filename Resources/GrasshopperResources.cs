@@ -1,0 +1,160 @@
+using ModelContextProtocol.Server;
+using System.ComponentModel;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
+
+namespace grasshoppermcp.Resources
+{
+    /// <summary>
+    /// Grasshopper MCP 资源集
+    /// </summary>
+    [McpServerResourceType]
+    public class GrasshopperResources
+    {
+        /// <summary>
+        /// 获取 Grasshopper 状态信息
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>状态信息</returns>
+        [McpServerResource(UriTemplate = "grasshopper://status")]
+        [Description("获取当前 Grasshopper 状态")]
+        public static Task<string> GetStatus(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var document = Grasshopper.Instances.ActiveCanvas?.Document;
+                var status = new
+                {
+                    IsDocumentActive = document != null,
+                    DocumentName = document?.DisplayName ?? "无文档",
+                    ComponentCount = document?.ObjectCount ?? 0,
+                    GrasshopperVersion = Grasshopper.Versioning.Version,
+                    RhinoVersion = Rhino.RhinoApp.Version
+                };
+
+                return Task.FromResult(JsonSerializer.Serialize(status, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult($"错误：{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 获取组件指南
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>组件指南</returns>
+        [McpServerResource(UriTemplate = "grasshopper://component_guide")]
+        [Description("获取 Grasshopper 组件使用指南")]
+        public static Task<string> GetComponentGuide(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var guide = new
+                {
+                    Title = "Grasshopper 组件使用指南",
+                    Categories = new[]
+                    {
+                        new { Name = "参数", Description = "输入参数和滑块" },
+                        new { Name = "几何", Description = "点、线、面、体等基本几何体" },
+                        new { Name = "曲线", Description = "曲线创建和操作" },
+                        new { Name = "表面", Description = "表面生成和修改" },
+                        new { Name = "网格", Description = "网格处理和操作" },
+                        new { Name = "变换", Description = "移动、旋转、缩放等变换" },
+                        new { Name = "数学", Description = "数学运算和函数" },
+                        new { Name = "逻辑", Description = "条件判断和流程控制" }
+                    },
+                    Usage = "使用 add_component 工具添加组件，使用 connect_components 工具连接组件"
+                };
+
+                return Task.FromResult(JsonSerializer.Serialize(guide, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult($"错误：{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 获取组件库
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>组件库信息</returns>
+        [McpServerResource(UriTemplate = "grasshopper://component_library")]
+        [Description("获取可用的 Grasshopper 组件库")]
+        public static Task<string> GetComponentLibrary(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var library = new
+                {
+                    Title = "Grasshopper 组件库",
+                    BasicComponents = new[]
+                    {
+                        new { Name = "Point", Type = "point", Description = "创建点" },
+                        new { Name = "Line", Type = "line", Description = "创建直线" },
+                        new { Name = "Circle", Type = "circle", Description = "创建圆" },
+                        new { Name = "Curve", Type = "curve", Description = "创建曲线" },
+                        new { Name = "Panel", Type = "panel", Description = "文本面板" },
+                        new { Name = "Slider", Type = "slider", Description = "数值滑块" }
+                    },
+                    AdvancedComponents = new[]
+                    {
+                        new { Name = "Voronoi", Type = "voronoi", Description = "Voronoi 图" },
+                        new { Name = "Delaunay", Type = "delaunay", Description = "Delaunay 三角剖分" },
+                        new { Name = "Mesh", Type = "mesh", Description = "网格处理" },
+                        new { Name = "Surface", Type = "surface", Description = "表面生成" }
+                    },
+                    Usage = "使用组件的 'type' 值作为 add_component 工具的 component_type 参数"
+                };
+
+                return Task.FromResult(JsonSerializer.Serialize(library, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult($"错误：{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 获取环境信息
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>环境信息</returns>
+        [McpServerResource(UriTemplate = "grasshopper://environment")]
+        [Description("获取 Grasshopper 环境信息")]
+        public static Task<string> GetEnvironment(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var environment = new
+                {
+                    Title = "Grasshopper 环境信息",
+                    RhinoVersion = Rhino.RhinoApp.Version.ToString(),
+                    GrasshopperVersion = Grasshopper.Versioning.Version.ToString(),
+                    Platform = Environment.OSVersion.Platform.ToString(),
+                    MachineName = Environment.MachineName,
+                    UserName = Environment.UserName,
+                    WorkingDirectory = Environment.CurrentDirectory,
+                    SystemInfo = new
+                    {
+                        ProcessorCount = Environment.ProcessorCount,
+                        SystemPageSize = Environment.SystemPageSize,
+                        WorkingSet = Environment.WorkingSet,
+                        Is64BitOperatingSystem = Environment.Is64BitOperatingSystem,
+                        Is64BitProcess = Environment.Is64BitProcess
+                    }
+                };
+
+                return Task.FromResult(JsonSerializer.Serialize(environment, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult($"错误：{ex.Message}");
+            }
+        }
+    }
+}
