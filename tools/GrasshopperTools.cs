@@ -32,7 +32,7 @@ namespace grasshoppermcp.Tools
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>操作结果</returns>
         [McpServerTool(Name = "add_component")]
-        [Description("🔧 基础工具 - 推荐优先使用。在 Grasshopper 画布上添加单个组件。这是最可靠的方法来创建组件。支持的组件类型：slider（数值滑块）、panel（文本面板）、point（点）、circle（圆）、line（直线）、curve（曲线）、rectangle（矩形）、box（长方体）等。成功后返回组件ID用于连接。对于复杂模式，建议多次调用此方法逐个添加组件，然后使用 connect_components 连接它们。")]
+        [Description("基础工具 - 推荐优先使用。在 Grasshopper 画布上添加单个组件。这是最可靠的方法来创建组件。支持的组件类型：slider（数值滑块）、panel（文本面板）、point（点）、circle（圆）、line（直线）、curve（曲线）、rectangle（矩形）、box（长方体）等。成功后返回组件ID用于连接。对于复杂模式，建议多次调用此方法逐个添加组件，然后使用 connect_components 连接它们。")]
         public static Task<string> AddComponent(
             [Description("组件类型。常用类型：slider（数值滑块，用于提供数值输入）、panel（文本面板，用于显示信息）、point（点几何）、circle（圆几何）、line（直线几何）、curve（曲线几何）、voronoi（泰森多边形）、delaunay（德劳内三角剖分）")] string component_type,
             [Description("组件在画布上的X坐标位置（像素单位）")] double x,
@@ -631,12 +631,12 @@ namespace grasshoppermcp.Tools
             try
             {
                 var usage_guide = @"
-🔧 推荐的工具使用顺序：
+推荐的工具使用顺序：
 1. add_component - 添加单个组件（最可靠）
 2. connect_components - 连接组件
 3. create_pattern - 仅用于预定义的复杂模式
 
-💡 最佳实践：
+最佳实践：
 - 简单需求：使用 add_component 逐个添加组件
 - 复杂设计：先查看下面的预定义模式，确认支持后再使用 create_pattern
 ";
@@ -686,7 +686,7 @@ namespace grasshoppermcp.Tools
                 {
                     Usage_Guide = usage_guide,
                     Available_Patterns = patterns,
-                    Note = "⚠️ 对于简单需求，建议直接使用 add_component 而不是 create_pattern"
+                    Note = "对于简单需求，建议直接使用 add_component 而不是 create_pattern"
                 };
 
                 return Task.FromResult(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
@@ -704,7 +704,7 @@ namespace grasshoppermcp.Tools
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>创建结果</returns>
         [McpServerTool(Name = "create_pattern")]
-        [Description("⚠️ 高级功能 - 仅在调用 get_available_patterns 确认支持后使用。根据描述创建复杂的 Grasshopper 组件模式。对于简单单个组件，建议使用 add_component。对于复杂设计，请先调用 get_available_patterns 查看预定义模式。")]
+        [Description("高级功能 - 仅在调用 get_available_patterns 确认支持后使用。根据描述创建复杂的 Grasshopper 组件模式。对于简单单个组件，建议使用 add_component。对于复杂设计，请先调用 get_available_patterns 查看预定义模式。")]
         public static Task<string> CreatePattern(
             [Description("必须是 get_available_patterns 返回的模式名称之一，或者是明确的几何描述（如：'Point Grid'、'Voronoi Pattern'、'Box'）。不要使用模糊描述。")] string description,
             CancellationToken cancellationToken = default)
@@ -732,7 +732,7 @@ namespace grasshoppermcp.Tools
 
                 if (!isKnownPattern && desc.Length < 5)
                 {
-                    return Task.FromResult($@"⚠️ 不建议使用模糊描述 '{description}'。
+                    return Task.FromResult($@"不建议使用模糊描述 '{description}'。
 
 建议的使用方法：
 1. 首先调用 get_available_patterns 查看支持的模式
