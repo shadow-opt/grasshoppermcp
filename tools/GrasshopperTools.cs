@@ -24,6 +24,159 @@ namespace grasshoppermcp.Tools
         private static readonly Dictionary<string, Guid> _componentMap = new Dictionary<string, Guid>();
 
         /// <summary>
+        /// 获取 Grasshopper 操作工作流指南
+        /// </summary>
+        /// <param name="design_intent">设计意图或目标</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>工作流指南</returns>
+        [McpServerTool(Name = "get_workflow_guide")]
+        [Description("LLM 必读指南 - 获取 Grasshopper 操作的完整工作流指南。在执行任何 Grasshopper 操作之前，LLM 应该首先调用此工具了解正确的操作流程。")]
+        public static Task<string> GetWorkflowGuide(
+            [Description("用户的设计意图或目标")] string design_intent = "",
+            CancellationToken cancellationToken = default)
+        {
+            var guide = $@"# Grasshopper MCP 操作指南
+
+## 关键提醒：组件必须连接输入才能工作
+
+### 重要原则：
+**几乎所有 Grasshopper 组件都需要输入参数才能正常工作！**
+
+- Box 组件需要：基础平面 + X,Y,Z 尺寸
+- Circle 组件需要：基础平面 + 半径
+- Line 组件需要：起点 + 终点
+- Move 组件需要：几何体 + 移动向量
+- Rotate 组件需要：几何体 + 旋转轴 + 角度
+
+### 必须遵循的工作流程：
+
+1. **了解当前状态**
+   - 调用 `get_document_info` 查看现有组件
+
+2. **创建组件前的规划**
+   - 确定需要创建的主要组件
+   - 调用 `get_component_input_requirements` 了解每个组件的输入需求
+   - 规划输入组件的位置和连接关系
+
+3. **创建组件的正确顺序**
+   - 先创建输入组件（滑块、平面、点等）
+   - 再创建主要组件（box、circle、line等）
+   - 最后建立连接
+
+4. **输入组件创建指南**
+   - 数值输入：创建 `number slider` 组件
+   - 平面输入：创建 `xy plane` 组件
+   - 点输入：创建 `point` 组件
+   - 向量输入：创建 `vector` 组件
+
+5. **连接建立**
+   - 使用 `connect_components` 工具建立连接
+   - 确保参数名称正确匹配
+
+6. **验证结果**
+   - 检查组件是否正常工作
+   - 调整参数值测试效果
+- 理解现有的设计流程
+
+### 2. 精确的工具使用
+- **组件命名**：使用准确的组件类型名称
+- **位置规划**：合理规划组件在画布上的位置，避免重叠
+- **连接验证**：连接组件前，确认源组件和目标组件的参数名称
+
+### 3. 常见组件类型
+- **输入参数**：`number slider`（数值滑块）、`panel`（文本面板）、`point`（点）
+- **几何体**：`circle`（圆）、`line`（直线）、`curve`（曲线）
+- **变换**：`move`（移动）、`rotate`（旋转）、`scale`（缩放）
+- **模式**：`voronoi`（泰森多边形）、`delaunay`（德劳内三角剖分）
+
+### 4. 工作流程
+1. 检查当前文档状态
+2. 规划组件布局
+3. 逐步添加组件
+4. **设置参数值**
+5. **建立连接**
+6. 验证结果
+
+### 5. 连接规则
+- 滑块通常连接到需要数值输入的组件
+- 几何体组件的输出连接到变换或其他几何操作
+- 面板用于显示结果或输入文本
+
+## 设计意图
+用户的设计意图：{design_intent}
+
+## 连接规则速查表
+
+| 组件类型 | 必需输入 | 推荐源组件 |
+|---------|---------|-----------|
+| Box | Base, X, Y, Z | xy plane + 3个 number slider |
+| Circle | Base, Radius | xy plane + number slider |
+| Sphere | Base, Radius | xy plane + number slider |
+| Line | Start, End | 2个 point |
+| Move | Geometry, Motion | 几何体 + vector |
+| Rotate | Geometry, Axis, Angle | 几何体 + line + number slider |
+
+## 重要提示
+- 创建组件后**立即**检查其输入要求
+- 永远不要创建孤立的组件
+- 组件布局建议：输入组件在左侧，主要组件在右侧
+- 坐标间隔建议：200-300像素
+- 记住：**没有输入的组件不会产生任何输出！**
+
+**核心原则：每创建一个组件，就要问自己：这个组件需要什么输入？**
+
+";
+
+            return Task.FromResult(guide);
+        }
+
+        /// <summary>
+        /// 获取组件连接指南
+        /// </summary>
+        /// <param name="source_component">源组件类型</param>
+        /// <param name="target_component">目标组件类型</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>连接指南</returns>
+        [McpServerTool(Name = "get_connection_guide")]
+        [Description("获取组件连接的详细指南，包括常见的连接模式和参数名称。")]
+        public static Task<string> GetConnectionGuide(
+            [Description("源组件类型")] string source_component = "",
+            [Description("目标组件类型")] string target_component = "",
+            CancellationToken cancellationToken = default)
+        {
+            var guide = $@"# 组件连接指南
+
+## 连接前的准备工作
+1. **读取当前文档**：使用 `get_document_info` 工具
+2. **确认组件存在**：检查源组件和目标组件是否已创建
+3. **了解参数名称**：确认准确的输入/输出参数名称
+
+## 常见连接模式
+
+### 数值滑块连接
+- 滑块输出：通常是 `Value` 或 `N`
+- 常见目标：`Radius`（半径）、`Height`（高度）、`Count`（数量）
+
+### 平面连接
+- xy plane 输出：`Plane`
+- 常见目标：`Base`（基础平面）、`Plane`（平面参数）
+
+### 几何体连接
+- 点输出：`Point`
+- 曲线输出：`Curve`
+- 表面输出：`Surface`
+
+## 连接示例
+源组件：{source_component}
+目标组件：{target_component}
+
+根据组件类型，推荐的连接方式会有所不同。
+";
+
+            return Task.FromResult(guide);
+        }
+
+        /// <summary>
         /// 在 Grasshopper 画布上添加组件
         /// </summary>
         /// <param name="component_type">组件类型</param>
@@ -87,7 +240,22 @@ namespace grasshoppermcp.Tools
                 // 刷新画布
                 Grasshopper.Instances.ActiveCanvas.Refresh();
 
-                return Task.FromResult($"成功：在位置 ({x}, {y}) 添加了 {component_type} 组件，ID: {componentId}");
+                // 获取组件输入要求
+                var inputRequirements = GetComponentRequirements(component_type.ToLower());
+
+                // 构建包含输入要求的详细成功消息
+                var successMessage = $@"成功：在位置 ({x}, {y}) 添加了 {component_type} 组件，ID: {componentId}
+
+{inputRequirements}
+
+下一步操作建议：
+1. 为该组件创建所需的输入组件
+2. 使用 connect_components 工具建立连接
+3. 调用 get_component_input_requirements 获取更详细的连接指南
+
+重要提醒：该组件需要输入参数才能正常工作！";
+
+                return Task.FromResult(successMessage);
             }
             catch (Exception ex)
             {
@@ -1128,5 +1296,204 @@ namespace grasshoppermcp.Tools
 
             return inputs.Count > 0 ? string.Join(", ", inputs) : "无可用输入参数";
         }
+
+        /// <summary>
+        /// 获取组件的输入要求和连接建议
+        /// </summary>
+        /// <param name="component_type">组件类型</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>组件输入要求</returns>
+        [McpServerTool(Name = "get_component_input_requirements")]
+        [Description("获取指定组件类型的输入要求和连接建议。LLM 在创建组件后应该调用此工具了解该组件需要哪些输入。")]
+        public static Task<string> GetComponentInputRequirements(
+            [Description("组件类型，如 box, circle, line, move, rotate 等")] string component_type,
+            CancellationToken cancellationToken = default)
+        {
+            var requirements = GetComponentRequirements(component_type.ToLower());
+            return Task.FromResult(requirements);
+        }
+
+        /// <summary>
+        /// 获取组件的输入要求详细信息
+        /// </summary>
+        /// <param name="componentType">组件类型</param>
+        /// <returns>要求详细信息</returns>
+        private static string GetComponentRequirements(string componentType)
+        {
+            var requirements = new Dictionary<string, string>
+            {
+                ["box"] = @"BOX 组件输入要求：
+必需输入：
+- Base (平面) - 连接 'xy plane' 组件的 Plane 输出
+- X (数值) - 连接 'number slider' 的 Value 输出，设置X方向长度
+- Y (数值) - 连接 'number slider' 的 Value 输出，设置Y方向长度  
+- Z (数值) - 连接 'number slider' 的 Value 输出，设置Z方向长度
+
+创建步骤：
+1. 创建 'xy plane' 组件作为基础平面
+2. 创建3个 'number slider' 组件分别控制X、Y、Z尺寸
+3. 将 xy plane 的 Plane 输出连接到 box 的 Base 输入
+4. 将3个滑块的 Value 输出分别连接到 box 的 X、Y、Z 输入
+
+重要：Box 组件创建后必须连接这4个输入才能正常工作！",
+
+                ["circle"] = @"CIRCLE 组件输入要求：
+必需输入：
+- Base (平面) - 连接 'xy plane' 组件的 Plane 输出
+- Radius (数值) - 连接 'number slider' 的 Value 输出，设置半径
+
+创建步骤：
+1. 创建 'xy plane' 组件作为基础平面
+2. 创建 'number slider' 组件控制半径
+3. 将 xy plane 的 Plane 输出连接到 circle 的 Base 输入
+4. 将滑块的 Value 输出连接到 circle 的 Radius 输入
+
+重要：Circle 组件创建后必须连接这2个输入才能正常工作！",
+
+                ["sphere"] = @"SPHERE 组件输入要求：
+必需输入：
+- Base (平面) - 连接 'xy plane' 组件的 Plane 输出
+- Radius (数值) - 连接 'number slider' 的 Value 输出，设置半径
+
+创建步骤：
+1. 创建 'xy plane' 组件作为基础平面
+2. 创建 'number slider' 组件控制半径
+3. 将 xy plane 的 Plane 输出连接到 sphere 的 Base 输入
+4. 将滑块的 Value 输出连接到 sphere 的 Radius 输入
+
+重要：Sphere 组件创建后必须连接这2个输入才能正常工作！",
+
+                ["cylinder"] = @"CYLINDER 组件输入要求：
+必需输入：
+- Base (平面) - 连接 'xy plane' 组件的 Plane 输出
+- Radius (数值) - 连接 'number slider' 的 Value 输出，设置半径
+- Length (数值) - 连接 'number slider' 的 Value 输出，设置长度
+
+创建步骤：
+1. 创建 'xy plane' 组件作为基础平面
+2. 创建2个 'number slider' 组件分别控制半径和长度
+3. 将 xy plane 的 Plane 输出连接到 cylinder 的 Base 输入
+4. 将滑块的 Value 输出分别连接到 cylinder 的 Radius 和 Length 输入
+
+重要：Cylinder 组件创建后必须连接这3个输入才能正常工作！",
+
+                ["line"] = @"LINE 组件输入要求：
+必需输入：
+- Start (点) - 连接 'point' 组件的 Point 输出，设置起点
+- End (点) - 连接 'point' 组件的 Point 输出，设置终点
+
+创建步骤：
+1. 创建2个 'point' 组件分别作为起点和终点
+2. 将第一个点的 Point 输出连接到 line 的 Start 输入
+3. 将第二个点的 Point 输出连接到 line 的 End 输入
+
+重要：Line 组件创建后必须连接这2个点输入才能正常工作！",
+
+                ["move"] = @"MOVE 组件输入要求：
+必需输入：
+- Geometry (几何体) - 连接要移动的几何体组件输出
+- Motion (向量) - 连接 'vector' 组件的 Vector 输出，设置移动方向和距离
+
+创建步骤：
+1. 创建要移动的几何体组件（如 box, circle 等）
+2. 创建 'vector' 组件定义移动向量
+3. 将几何体的输出连接到 move 的 Geometry 输入
+4. 将向量的 Vector 输出连接到 move 的 Motion 输入
+
+重要：Move 组件创建后必须连接这2个输入才能正常工作！",
+
+                ["rotate"] = @"ROTATE 组件输入要求：
+必需输入：
+- Geometry (几何体) - 连接要旋转的几何体组件输出
+- Axis (直线) - 连接 'line' 组件的 Line 输出，设置旋转轴
+- Angle (数值) - 连接 'number slider' 的 Value 输出，设置旋转角度
+
+创建步骤：
+1. 创建要旋转的几何体组件
+2. 创建 'line' 组件定义旋转轴
+3. 创建 'number slider' 组件控制旋转角度
+4. 将几何体输出连接到 rotate 的 Geometry 输入
+5. 将线的 Line 输出连接到 rotate 的 Axis 输入
+6. 将滑块的 Value 输出连接到 rotate 的 Angle 输入
+
+重要：Rotate 组件创建后必须连接这3个输入才能正常工作！",
+
+                ["scale"] = @"SCALE 组件输入要求：
+必需输入：
+- Geometry (几何体) - 连接要缩放的几何体组件输出
+- Center (点) - 连接 'point' 组件的 Point 输出，设置缩放中心
+- Factor (数值) - 连接 'number slider' 的 Value 输出，设置缩放比例
+
+创建步骤：
+1. 创建要缩放的几何体组件
+2. 创建 'point' 组件定义缩放中心
+3. 创建 'number slider' 组件控制缩放比例
+4. 将几何体输出连接到 scale 的 Geometry 输入
+5. 将点的 Point 输出连接到 scale 的 Center 输入
+6. 将滑块的 Value 输出连接到 scale 的 Factor 输入
+
+重要：Scale 组件创建后必须连接这3个输入才能正常工作！",
+
+                ["rectangle"] = @"RECTANGLE 组件输入要求：
+必需输入：
+- Base (平面) - 连接 'xy plane' 组件的 Plane 输出
+- X (数值) - 连接 'number slider' 的 Value 输出，设置X方向长度
+- Y (数值) - 连接 'number slider' 的 Value 输出，设置Y方向长度
+
+创建步骤：
+1. 创建 'xy plane' 组件作为基础平面
+2. 创建2个 'number slider' 组件分别控制X、Y尺寸
+3. 将 xy plane 的 Plane 输出连接到 rectangle 的 Base 输入
+4. 将滑块的 Value 输出分别连接到 rectangle 的 X、Y 输入
+
+重要：Rectangle 组件创建后必须连接这3个输入才能正常工作！",
+
+                ["voronoi"] = @"VORONOI 组件输入要求：
+必需输入：
+- Points (点集合) - 连接多个 'point' 组件的 Point 输出
+- Radius (数值) - 连接 'number slider' 的 Value 输出，设置影响半径
+
+创建步骤：
+1. 创建多个 'point' 组件作为种子点
+2. 创建 'number slider' 组件控制半径
+3. 将所有点的 Point 输出连接到 voronoi 的 Points 输入
+4. 将滑块的 Value 输出连接到 voronoi 的 Radius 输入
+
+重要：Voronoi 组件创建后必须连接点集合和半径输入才能正常工作！",
+
+                ["delaunay"] = @"DELAUNAY 组件输入要求：
+必需输入：
+- Points (点集合) - 连接多个 'point' 组件的 Point 输出
+
+创建步骤：
+1. 创建多个 'point' 组件作为三角剖分点
+2. 将所有点的 Point 输出连接到 delaunay 的 Points 输入
+
+重要：Delaunay 组件创建后必须连接点集合输入才能正常工作！"
+            };
+
+            if (requirements.ContainsKey(componentType))
+            {
+                return requirements[componentType];
+            }
+            else
+            {
+                return $@" {componentType.ToUpper()} 组件：
+这个组件可能需要特定的输入参数才能正常工作。
+建议：
+1. 检查组件的输入端口
+2. 为每个输入端口创建相应的源组件
+3. 建立正确的连接关系
+
+常见输入类型：
+- 几何体输入：需要连接点、线、面等几何组件
+- 数值输入：需要连接 number slider 组件
+- 平面输入：需要连接 xy plane 组件
+- 点输入：需要连接 point 组件
+
+重要：大多数组件都需要输入参数才能正常工作！";
+            }
+        }
+
     }
 }
